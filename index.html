@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculateur SCI – IR vs IS</title>
+  <style>
+    :root {
+      --bg:#0b1020; --card:#121a2e; --muted:#93a1b1; --text:#e6e9ef;
+      --accent:#7c5cff; --accent2:#00c2ff; --good:#2fd17a; --bad:#ff5c8a; --warn:#ffb020;
+      --line:#1e2746; --chip:#0f1530; --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans","Apple Color Emoji","Segoe UI Emoji"; background:radial-gradient(1200px 600px at 80% -20%, #1b2447, transparent), linear-gradient(160deg, #0b1020 0%, #0b1020 40%, #0e1530 100%); color:var(--text)}
+    .wrap{max-width:1200px; margin:40px auto; padding:0 16px}
+    header{display:flex; align-items:center; gap:14px; margin-bottom:22px}
+    .logo{width:42px; height:42px; border-radius:12px; background:linear-gradient(145deg,var(--accent),var(--accent2)); box-shadow:var(--shadow)}
+    h1{font-size:clamp(20px, 3.2vw, 32px); margin:0}
+    p.lead{margin:6px 0 0; color:var(--muted)}
+
+    /* === Disposition : gauche (2 blocs d’entrées), droite (résultats) === */
+    .layout{
+      display:grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(380px, 1.15fr);
+      gap:18px;
+      align-items:start;
+    }
+    .col-left{display:flex; flex-direction:column; gap:18px}
+    .col-right{align-self:start}
+    @media (max-width: 960px){
+      .layout{grid-template-columns:1fr}
+      .col-right{order:3}
+    }
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow)}
+    .card .hd{padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px}
+    .card .bd{padding:16px}
+    .chip{font-size:12px; background:var(--chip); border:1px solid var(--line); padding:4px 8px; border-radius:999px; color:var(--muted)}
+    label{display:block; font-size:14px; color:#cbd5e1; margin-bottom:6px}
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:12px}
+    @media (max-width:640px){ .row{grid-template-columns:1fr} }
+    input[type="number"], select{width:100%; padding:12px; border-radius:12px; background:#0d142b; border:1px solid #1b274d; color:var(--text)}
+    input[type="range"]{width:100%}
+    .hint{font-size:12px; color:var(--muted); margin-top:6px}
+    .switch{display:flex; align-items:center; gap:10px; margin:10px 0}
+
+    /* Options IR/IS masquées mais conservées */
+    #optsRow{ display:none !important; }
+
+    /* Champs “grisés” lisibles */
+    .readonly label{opacity:.7}
+    .readonly input, .readonly select{opacity:.6; pointer-events:none}
+
+    /* Champs explicitement masqués (conservés pour le calcul) */
+    .hide{display:none !important;}
+
+    /* === Grille de stats (IR/IS perso + récap) === */
+    .statsGrid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap:10px;
+    }
+    @media (max-width: 1100px){ .statsGrid{grid-template-columns: repeat(2, minmax(0,1fr));} }
+    @media (max-width: 560px){ .statsGrid{grid-template-columns: 1fr;} }
+
+    .stat{
+      background:#0f1630;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:10px 12px;
+      min-height:68px;
+      display:flex; flex-direction:column; justify-content:center;
+    }
+    .stat .k{font-size:12px; color:var(--muted)}
+    .stat .v{font-size:20px; font-weight:800; margin-top:2px; font-variant-numeric: tabular-nums}
+    .stat.good{border-color:#0e3a2b; background:#0b1f1a}
+    .stat.good .v{color:#7fe8b2}
+    .stat.bad{border-color:#4b1020; background:#1a0d16}
+    .stat.bad .v{color:#ff8aa5}
+    .k .mini{font-size:11px; opacity:.8}
+
+    /* === Détails (accordéon) === */
+    .detailsWrap details{
+      border:1px dashed var(--line);
+      border-radius:12px;
+      margin-bottom:12px;
+      background:#0f142b;
+    }
+    .detailsWrap summary{
+      list-style:none;
+      cursor:pointer;
+      padding:10px 12px;
+      display:flex; align-items:center; gap:10px;
+      user-select:none;
+      color:#c6d0f5;
+    }
+    .detailsWrap summary::-webkit-details-marker{display:none}
+    .detailsWrap .chev{margin-left:auto; transition:transform .2s ease}
+    .detailsWrap details[open] .chev{transform:rotate(180deg)}
+    .collapseInner{padding:12px; border-top:1px solid var(--line)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo"></div>
+      <div>
+        <h1>Calculateur SCI – comparaison immédiate IR vs IS</h1>
+        <p class="lead">Saisissez le <b>résultat imposable</b>, le <b>taux de redistribution</b>, vos <b>parts</b> et l’amortissement IS.</p>
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- COLONNE GAUCHE : deux blocs d’entrées -->
+      <div class="col-left">
+        <!-- Bloc 1 -->
+        <section class="card" aria-labelledby="bloc1Title">
+          <div class="hd">
+            <span class="chip">Paramètres fiscaux</span>
+            <h2 id="bloc1Title" style="margin:0; font-size:16px; font-weight:600; color:#c6d0f5">Entrées – Fiscales</h2>
+          </div>
+          <div class="bd">
+            <div class="row" style="margin-top:6px">
+              <div>
+                <label for="otherIncome">Vos autres revenus imposables (€)</label>
+                <input id="otherIncome" type="number" value="36042" step="1000" />
+                <div class="hint">Salaire, BIC, etc. hors SCI.</div>
+              </div>
+              <div>
+                <label for="famParts">Nombre de parts fiscales (quotient familial)</label>
+                <input id="famParts" type="number" min="1" step="0.5" value="1" />
+                <div class="hint">Exemple : célibataire 1, couple 2, couple + 2 enfants 3.</div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label for="profit" style="color: gray;">Résultat imposable (€)</label>
+                <input id="profit" type="number" inputmode="decimal" min="-100000000" value="1119840" step="1000" style="color: gray;"/>
+                <div class="hint" style="color: gray;">Ceci est le <b>résultat</b> avant impôts (pas le CA).</div>
+              </div>
+              <div>
+                <label for="redis" style="color: gray;">Taux de redistribution (%)</label>
+                <input id="redis" type="number" min="0" max="100" value="68" step="1" style="color: gray;"/>
+                <input id="redisRange" type="range" min="0" max="100" value="68" step="1" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:6px">
+              <div>
+                <label for="myParts">Vos parts</label>
+                <input id="myParts" type="number" min="0" step="1" value="84" />
+                <div class="hint">Simulation personnalisée pour vos parts.</div>
+              </div>
+              <div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bloc 2 -->
+        <section class="card" aria-labelledby="bloc2Title">
+          <div class="hd">
+            <span class="chip">Paramètres SCI</span>
+            <h2 id="bloc2Title" style="margin:0; font-size:16px; font-weight:600; color:#c6d0f5">Entrées – SCI</h2>
+          </div>
+          <div class="bd">
+            <!-- Amortissement -->
+            <div class="row" style="margin-top:6px">
+              <div>
+                <label for="amort">Amortissement déductible IS (€)</label>
+                <input id="amort" type="number" min="0" max="350000" step="1000" value="0" />
+                <div class="hint">Se retranche de l’IS dû (plafonné à l’IS calculé).</div>
+              </div>
+              <div style="padding-top:26px">
+                <input id="amortRange" type="range" min="0" max="350000" step="1000" value="0" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:6px">
+              <div class="readonly">
+                <label for="totalParts">Nombre total de parts</label>
+                <input id="totalParts" type="number" min="1" step="1" value="1200" disabled />
+                <div class="hint">Exemple : 1200 parts sociales au total.</div>
+              </div>
+              <div class="readonly">
+                <label for="caHT">Chiffre d'affaires HT de l'exercice (€)</label>
+                <input id="caHT" type="number" min="0" step="1000" value="1459684" disabled />
+                <div class="hint">Condition : <b>&lt; 10 000 000 €</b>.</div>
+              </div>
+            </div>
+
+            <!-- Masqués à l’écran (gardés pour le calcul) -->
+            <div class="row readonly hide" style="margin-top:6px">
+              <div>
+                <label for="capitalPaid">Capital entièrement libéré</label>
+                <select id="capitalPaid" disabled>
+                  <option value="yes" selected>Oui</option>
+                  <option value="no">Non</option>
+                </select>
+              </div>
+              <div>
+                <label for="fiscalMonths">Durée de l'exercice (mois)</label>
+                <input id="fiscalMonths" type="number" min="1" max="24" step="1" value="12" disabled />
+                <div class="hint">Le seuil de 42 500 € est <b>proratisé</b> si ≠ 12 mois.</div>
+              </div>
+            </div>
+
+            <div class="row readonly hide" style="margin-top:6px">
+              <div>
+                <label for="pctEligibleOwners">% détenu par des personnes physiques (ou sociétés éligibles)</label>
+                <input id="pctEligibleOwners" type="number" min="0" max="100" step="1" value="100" disabled />
+                <div class="hint">Condition : <b>≥ 75 %</b> du capital.</div>
+              </div>
+              <div></div>
+            </div>
+
+            <div id="eligStatus" class="status hide" style="margin-top:10px"></div>
+
+            <!-- Options IR/IS masquées -->
+            <div class="row" id="optsRow">
+              <div>
+                <label>SCI à l'IR – options</label>
+                <div class="switch">
+                  <input id="psIR" type="checkbox" checked />
+                  <span>Ajouter les prélèvements sociaux 17,2% (foncier)</span>
+                </div>
+              </div>
+              <div>
+                <label>SCI à l'IS – options</label>
+                <div class="row" style="margin-top:6px">
+                  <div>
+                    <label for="isThreshold">Seuil taux réduit (base 12 mois, €)</label>
+                    <input id="isThreshold" type="number" value="42500" step="500" />
+                  </div>
+                  <div>
+                    <label for="isStd">Taux IS standard (%)</label>
+                    <input id="isStd" type="number" value="25" step="0.1" />
+                  </div>
+                </div>
+                <div class="row" style="margin-top:6px">
+                  <div>
+                    <label for="divMode">Fiscalité des dividendes (affichage)</label>
+                    <select id="divMode">
+                      <option value="pfu">PFU 30% (12,8% IR + 17,2% PS)</option>
+                      <option value="bareme">Barème IR + abattement 40% (+ 17,2% PS)</option>
+                      <option value="both" selected>Afficher PFU <b>et</b> Barème</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="reducedRate">Taux réduit (%)</label>
+                    <input id="reducedRate" type="number" value="15" step="0.1" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="hint hide">⚠️ Simplification pédagogique (pas un conseil fiscal). Charges, intérêts, amortissements, régimes particuliers non inclus.</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- COLONNE DROITE : Résultats -->
+      <section class="card col-right" aria-labelledby="outputsTitle">
+        <div class="hd">
+          <span class="chip">Résultats</span>
+          <h2 id="outputsTitle" style="margin:0; font-size:16px; font-weight:600; color:#c6d0f5">Comparatif en temps réel</h2>
+        </div>
+        <div class="bd detailsWrap">
+          <!-- Groupe 1 : Vos simulations personnelles -->
+          <details id="groupPersonal" open>
+            <summary>
+              <span class="chip">Simulations</span>
+              <strong>Votre cas – IR & IS</strong>
+              <span class="chev">▾</span>
+            </summary>
+            <div id="personalContent" class="collapseInner"></div>
+          </details>
+
+          <!-- Groupe 2 : Récap SCI -->
+          <details id="groupRecap">
+            <summary>
+              <span class="chip">Récap</span>
+              <strong>SCI – IR & IS (global)</strong>
+              <span class="chev">▾</span>
+            </summary>
+            <div id="recapContent" class="collapseInner"></div>
+          </details>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const E = (id)=>document.getElementById(id);
+    const fmt = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR', maximumFractionDigits:0});
+    const pctf = (x)=> (x*100).toFixed(1).replace('.0','')+" %";
+
+    const LOCKED = { capitalPaid: 'yes', fiscalMonths: 12, pctEligibleOwners: 100 };
+
+    const BAREME = [
+      {limit: 11294, rate: 0.0},
+      {limit: 28797, rate: 0.11},
+      {limit: 82341, rate: 0.30},
+      {limit: 177106, rate: 0.41},
+      {limit: Infinity, rate: 0.45}
+    ];
+
+    const parseNum = el => { const v = parseFloat(String(el.value).replace(/\s/g,'')); return isNaN(v) ? 0 : v; };
+    const clamp01 = x => Math.min(1, Math.max(0, x));
+
+    function computeIR(revImposable, famParts){
+      const qf = revImposable / famParts;
+      let taxPerPart = 0, prev = 0;
+      for (const b of BAREME){
+        if (qf > prev){
+          const part = Math.min(qf, b.limit) - prev;
+          taxPerPart += part * b.rate;
+          prev = b.limit;
+        }
+      }
+      return taxPerPart * famParts;
+    }
+
+    function calcIS(profit, stdRate, reducedOn, reducedRate, threshold){
+      if (profit <= 0) return { is:0, after:profit };
+      let base = profit, is = 0;
+      if(reducedOn){
+        const partReduite = Math.min(base, threshold);
+        is += partReduite * (reducedRate/100);
+        base -= partReduite;
+      }
+      if(base>0) is += base * (stdRate/100);
+      return { is, after: profit - is };
+    }
+
+    function buildPersonalIR(myProfit, myDist, includePS, otherIncome, famParts){
+      const psRate = includePS ? 0.172 : 0;
+      const baseSCI = Math.max(myProfit, 0);
+      const distSCI = Math.max(myDist,   0);
+      const impotsAvant = computeIR(otherIncome, Math.max(1, famParts));
+      const impotsApres = computeIR(otherIncome + baseSCI, Math.max(1, famParts));
+      const irSupp = impotsApres - impotsAvant;
+      const ps = baseSCI * psRate;
+      const totalTax = irSupp + ps;
+      const net = distSCI - totalTax;
+      return { baseSCI, distSCI, irSupp, ps, totalTax, net };
+    }
+
+    function renderEligibilityUI({eligible, reasons, thresholdEff}){
+      const box = E('eligStatus');
+      const statusChip = eligible
+        ? `<span class="chip" style="border-color:#0e3a2b;background:#0b1f1a;color:#7fe8b2">Éligible au taux réduit 15% jusqu'à ${fmt.format(thresholdEff)}</span>`
+        : `<span class="chip" style="border-color:#4b1020;background:#1a0d16;color:#ff8aa5">Non éligible au taux réduit 15%</span>`;
+      const detailChips = reasons.map(r=>`<span class="chip ${r.ok ? 'good' : 'bad'}">${r.label}</span>`).join('');
+      box.innerHTML = statusChip + (detailChips ? `<div class="status" style="margin-top:8px">${detailChips}</div>` : '');
+    }
+
+    function render(){
+      // Forcer valeurs masquées
+      if (E('capitalPaid'))   E('capitalPaid').value = LOCKED.capitalPaid;
+      if (E('fiscalMonths'))  E('fiscalMonths').value = LOCKED.fiscalMonths;
+      if (E('pctEligibleOwners')) E('pctEligibleOwners').value = LOCKED.pctEligibleOwners;
+
+      // Entrées
+      const otherIncome = parseNum(E('otherIncome'));
+      const famParts    = Math.max(1, parseNum(E('famParts')));
+      const R = Math.max(0, parseNum(E('profit')));
+      const k = clamp01(parseNum(E('redis'))/100);
+      E('redisRange').value = (k*100).toFixed(0);
+
+      // Amortissement
+      let amort = Math.max(0, Math.min(350000, parseNum(E('amort'))));
+      E('amort').value = amort; E('amortRange').value = amort;
+
+      // Visibles
+      const totalParts = parseNum(E('totalParts'));
+      const ca         = parseNum(E('caHT'));
+
+      // Masqués
+      const months  = LOCKED.fiscalMonths;
+      const capPaid = LOCKED.capitalPaid === 'yes';
+      const pctElig = LOCKED.pctEligibleOwners;
+
+      // Options
+      const includePS   = true;
+      const isStd       = 25;
+      const reducedRate = 15;
+      const baseThresh  = 42500;
+
+      // Quote-part
+      const myParts  = Math.min(totalParts, parseNum(E('myParts')));
+      const myShare  = myParts / totalParts;
+      const myProfit = R * myShare;
+      const myDist   = (R * k) * myShare;
+
+      // Éligibilité
+      const thresholdEff = baseThresh * (months/12);
+      const isReducedOn  = (ca < 10_000_000) && capPaid && (pctElig >= 75);
+      renderEligibilityUI({
+        eligible: isReducedOn,
+        reasons: [
+          {label:`CA HT ${fmt.format(ca)} (< 10 M€)`, ok: ca < 10_000_000},
+          {label:`Capital entièrement libéré: ${capPaid ? 'Oui':'Non'}`, ok: capPaid},
+          {label:`Détention éligible ≥ 75% (${pctElig}%)`, ok: pctElig >= 75}
+        ],
+        thresholdEff
+      });
+
+      // IS global + amortissement
+      const isBrut      = calcIS(R, isStd, isReducedOn, reducedRate, thresholdEff);
+      const amortEffect = Math.min(isBrut.is, amort);
+      const IS_due      = isBrut.is - amortEffect;
+      const IS_after    = isBrut.after + amortEffect;
+      const IS_distrib  = Math.max(IS_after, 0) * k;
+      const IS_dispo    = Math.max(IS_after - IS_distrib, 0);
+
+      // IR global
+      const IR_base    = R;
+      const IR_distrib = R * k;
+      const IR_dispo   = Math.max(R - IR_distrib, 0);
+
+      // Votre cas – IR
+      const meIR = buildPersonalIR(myProfit, myDist, includePS, otherIncome, famParts);
+
+      // Votre cas – IS (PFU vs Barème)
+      const myAfter       = IS_after   * myShare;
+      const myDistributed = IS_distrib * myShare;
+
+      const pfuIR = 0.128, pfuPS = 0.172;
+      const myTaxDiv_PFU = myDistributed * (pfuIR + pfuPS);
+      const myNet_PFU    = myDistributed - myTaxDiv_PFU;
+
+      const taxableBase   = myDistributed * 0.60;
+      const impotsAvant   = computeIR(otherIncome, famParts);
+      const impotsApres   = computeIR(otherIncome + taxableBase, famParts);
+      const irSuppDiv     = impotsApres - impotsAvant;
+      const psDiv         = myDistributed * 0.172;
+      const myTaxDiv_BAR  = irSuppDiv + psDiv;
+      const myNet_BAR     = myDistributed - myTaxDiv_BAR;
+
+      const usePFU = myNet_PFU >= myNet_BAR;
+      const bestMode = usePFU ? "PFU (30%)" : "Barème (abatt. 40%)";
+      const bestTax  = usePFU ? myTaxDiv_PFU : myTaxDiv_BAR;
+      const bestNet  = usePFU ? myNet_PFU    : myNet_BAR;
+
+      /* ===== Cartes PERSO ===== */
+      const IR_personal = `
+        <div class="card" style="margin-bottom:16px">
+          <div class="hd"><span class="chip">Votre cas – IR</span></div>
+          <div class="bd">
+            <div class="statsGrid" style="margin-bottom:10px">
+              <div class="stat"><div class="k">Base imposable (vos parts)</div><div class="v">${fmt.format(meIR.baseSCI)}</div></div>
+              <div class="stat"><div class="k">Distribution (vos parts)</div><div class="v">${fmt.format(meIR.distSCI)}</div></div>
+              <div class="stat ${meIR.net>=0?'good':'bad'}"><div class="k">Net en poche</div><div class="v">${fmt.format(meIR.net)}</div></div>
+            </div>
+            <div class="statsGrid">
+              <div class="stat"><div class="k">Impôt dû (barème QF)</div><div class="v">${fmt.format(meIR.irSupp)}</div></div>
+              <div class="stat"><div class="k">Prélèvements sociaux</div><div class="v">${fmt.format(meIR.ps)}</div></div>
+              <div class="stat"><div class="k">Total impôts</div><div class="v">${fmt.format(meIR.totalTax)}</div></div>
+            </div>
+          </div>
+        </div>`;
+
+      const IS_personal = `
+        <div class="card" style="margin-bottom:16px">
+          <div class="hd"><span class="chip">Votre cas – IS</span></div>
+          <div class="bd">
+            <div class="statsGrid" style="margin-bottom:10px">
+              <div class="stat"><div class="k">Résultat après IS (vos parts)</div><div class="v">${fmt.format(myAfter)}</div></div>
+              <div class="stat"><div class="k">Dividendes bruts (vos parts)</div><div class="v">${fmt.format(myDistributed)}</div></div>
+              <div class="stat ${bestNet>=0?'good':'bad'}"><div class="k">Net en poche</div><div class="v">${fmt.format(bestNet)}</div></div>
+            </div>
+            <div class="statsGrid">
+              <div class="stat"><div class="k">Mode retenu</div><div class="v">${bestMode}</div></div>
+              <div class="stat"><div class="k">Impôt sur dividendes</div><div class="v">${fmt.format(bestTax)}</div></div>
+              <div class="stat"><div class="k">Taux de distribution</div><div class="v">${pctf(k)}</div></div>
+            </div>
+          </div>
+        </div>`;
+
+      /* ===== Récaps ===== */
+      const SCI_IR = `
+        <div class="card" style="margin-bottom:16px">
+          <div class="hd"><span class="chip">Récap SCI à l’IR (global)</span></div>
+          <div class="bd">
+            <div class="statsGrid">
+              <div class="stat"><div class="k">Résultat imposable (SCI)</div><div class="v">${fmt.format(IR_base)}</div></div>
+              <div class="stat"><div class="k">Distribution (SCI, ${pctf(k)})</div><div class="v">${fmt.format(IR_distrib)}</div></div>
+              <div class="stat"><div class="k">Disponible (non distribué)</div><div class="v">${fmt.format(IR_dispo)}</div></div>
+            </div>
+            <div class="hint" style="margin-top:8px">À l’IR, l’impôt est payé par les associés.</div>
+          </div>
+        </div>`;
+
+      const SCI_IS = `
+        <div class="card">
+          <div class="hd"><span class="chip">Récap SCI à l’IS (global)</span></div>
+          <div class="bd">
+            <div class="statsGrid">
+              <div class="stat"><div class="k">Résultat avant IS</div><div class="v">${fmt.format(R)}</div></div>
+              <div class="stat"><div class="k">IS dû <span class="mini">${isReducedOn ? `(taux réduit ${reducedRate}% jusqu’à ${fmt.format(thresholdEff)})` : ``}</span></div><div class="v">${fmt.format(IS_due)}</div></div>
+              <div class="stat"><div class="k">Amortissement imputé</div><div class="v">${fmt.format(amortEffect)}</div></div>
+              <div class="stat"><div class="k">Résultat après IS</div><div class="v">${fmt.format(IS_after)}</div></div>
+              <div class="stat"><div class="k">Distribution (SCI, ${pctf(k)})</div><div class="v">${fmt.format(IS_distrib)}</div></div>
+              <div class="stat"><div class="k">Disponible (non distribué)</div><div class="v">${fmt.format(IS_dispo)}</div></div>
+            </div>
+          </div>
+        </div>`;
+
+      // Injecter dans les groupes (sans casser l'état "open")
+      E('personalContent').innerHTML = IR_personal + IS_personal;
+      E('recapContent').innerHTML    = SCI_IR + SCI_IS;
+    }
+
+    // Mutual exclusivity between the two <details>
+    function wireAccordions(){
+      const pers = E('groupPersonal');
+      const recap = E('groupRecap');
+
+      if(!pers || !recap) return;
+
+      pers.addEventListener('toggle', ()=>{
+        if (pers.open) recap.open = false;
+        else recap.open = true; // on garde toujours un groupe ouvert
+      });
+      recap.addEventListener('toggle', ()=>{
+        if (recap.open) pers.open = false;
+        else pers.open = true;
+      });
+    }
+
+    // Events
+    [
+      'profit','redis','totalParts','myParts','caHT',
+      'capitalPaid','fiscalMonths','pctEligibleOwners',
+      'otherIncome','famParts','amort'
+    ].forEach(id=>{
+      const el = E(id); if(!el) return;
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+
+    E('redisRange').addEventListener('input', (e)=>{ E('redis').value = e.target.value; render(); });
+    E('amortRange').addEventListener('input', (e)=>{ E('amort').value = e.target.value; render(); });
+
+    wireAccordions();
+    render();
+  </script>
+</body>
+</html>
